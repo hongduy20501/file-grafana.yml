@@ -1,0 +1,125 @@
+version: '3.8'
+services:
+  db:
+    image: mysql
+    container_name: db
+    networks:
+      - network
+    environment:
+      MYSQL_ROOT_PASSWORD: hongduy
+      MYSQL_DATABASE: grafana
+      MYSQL_USER: ubuntu
+      MYSQL_PASSWORD: hongduy
+    ports:
+      - 6033:3306
+    volumes:
+      - dbdata:/var/lib/mysql
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    links:
+      - db
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      PMA_ARBITRARY: 1
+    restart: always
+    networks:
+      - network
+    ports:
+      - 8081:80
+      
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - /mnt/share/prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+    networks:
+      - network
+      - prometheus
+    ports:
+      - 9090:9090
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+          - node.labels.prometheus == true
+  alertmanager:
+    image: prom/alertmanager
+    volumes:
+      - /mnt/share/alertmanager:/etc/alertmanager
+    networks:
+      - network
+    command:
+      - --config.file=/etc/alertmanager/config.yml
+      - --storage.path=/alertmanager
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+          - node.labels.alertmanager == true
+  node-exporter:
+    image: prom/node-exporter
+    hostname: '{{.Node.Hostname}}'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command: 
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+      - --collector.filesystem.ignored-mount-points
+      - "^/(boot|dev|proc|run|sys|var)($$|/)"
+    networks:
+      - network
+    deploy:
+      mode: global
+    ports:
+      - 9100:9100
+
+  grafana:
+    image: grafana/grafana
+    environment:
+      GF_RENDERER_PLUGIN_TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - /mnt/share/grafana/provisioning:/etc/grafana/provisioning
+      - /mnt/share/grafana.ini:/etc/grafana/grafana.ini:ro
+      - /mnt/share/grafana/emails:/usr/share/grafana/public/emails
+    networks:
+      - network
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+          - node.labels.grafana == true
+    ports:
+      - 3000:3000
+  grafana_proxy:
+    image: elfdev/nginx-proxy:0.0.1
+    environment:
+      PROXY_MAP: |
+        / => grafana:3000/
+    networks:
+      - network
+  prometheus_proxy:
+    image: elfdev/nginx-proxy:0.0.1
+    environment:
+      PROXY_MAP: |
+        / => prometheus:9090/
+    networks:
+      - network
+volumes:
+  grafana_data:
+  prometheus_data:
+  dbdata:
+
+networks:
+  network:
+  prometheus:
+    attachable: true
