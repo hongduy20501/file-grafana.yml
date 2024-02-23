@@ -7,10 +7,10 @@ services:
     networks:
       - network
     environment:
-      MYSQL_ROOT_PASSWORD: elofun@2023
+      MYSQL_ROOT_PASSWORD: 
       MYSQL_DATABASE: grafana
-      MYSQL_USER: elofun
-      MYSQL_PASSWORD: elofun@2023
+      MYSQL_USER: 
+      MYSQL_PASSWORD: 
 
     volumes:
       - dbdata:/var/lib/mysql
@@ -63,7 +63,6 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro  
     command:
       - --docker_only
-
     privileged: true
     networks:
       - network
@@ -88,8 +87,7 @@ services:
       mode: global
       
   grafana:
-    image: grafana/grafana
-    
+    image: grafana/grafana   
     volumes:
       - grafana_data:/var/lib/grafana
       - /mnt/shared/grafana:/etc/grafana/provisioning
@@ -98,7 +96,6 @@ services:
     networks:
       - network
     environment:
-
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
       GF_AUTH_DISABLE_LOGIN_FORM: "true"
