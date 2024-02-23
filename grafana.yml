@@ -1,4 +1,5 @@
 version: '3.8'
+
 services:
   db:
     image: mysql
@@ -6,32 +7,23 @@ services:
     networks:
       - network
     environment:
-      MYSQL_ROOT_PASSWORD: hongduy
+      MYSQL_ROOT_PASSWORD: elofun@2023
       MYSQL_DATABASE: grafana
-      MYSQL_USER: ubuntu
-      MYSQL_PASSWORD: hongduy
-    ports:
-      - 6033:3306
+      MYSQL_USER: elofun
+      MYSQL_PASSWORD: elofun@2023
+
     volumes:
       - dbdata:/var/lib/mysql
-  phpmyadmin:
-    image: phpmyadmin/phpmyadmin
-    links:
-      - db
-    environment:
-      PMA_HOST: db
-      PMA_PORT: 3306
-      PMA_ARBITRARY: 1
-    restart: always
-    networks:
-      - network
-    ports:
-      - 8081:80
+    deploy:
+      placement:
+        constraints:
+          - node.labels.grafana-db == true
+
       
   prometheus:
     image: prom/prometheus
     volumes:
-      - /mnt/share/prometheus:/etc/prometheus
+      - /mnt/shared/prometheus:/etc/prometheus
       - prometheus_data:/prometheus
     command:
       - --config.file=/etc/prometheus/prometheus.yml
@@ -41,17 +33,16 @@ services:
     networks:
       - network
       - prometheus
-    ports:
-      - 9090:9090
     deploy:
       placement:
         constraints:
           - node.role == manager
           - node.labels.prometheus == true
+
   alertmanager:
     image: prom/alertmanager
     volumes:
-      - /mnt/share/alertmanager:/etc/alertmanager
+      - /mnt/shared/alertmanager:/etc/alertmanager
     networks:
       - network
     command:
@@ -62,6 +53,23 @@ services:
         constraints:
           - node.role == manager
           - node.labels.alertmanager == true
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro  
+    command:
+      - --docker_only
+
+    privileged: true
+    networks:
+      - network
+    deploy:
+      mode: global
+
   node-exporter:
     image: prom/node-exporter
     hostname: '{{.Node.Hostname}}'
@@ -72,54 +80,85 @@ services:
     command: 
       - --path.procfs=/host/proc
       - --path.sysfs=/host/sys
-      - --path.rootfs=/rootfs
       - --collector.filesystem.ignored-mount-points
-      - "^/(boot|dev|proc|run|sys|var)($$|/)"
+      - "^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)"
     networks:
       - network
     deploy:
       mode: global
-    ports:
-      - 9100:9100
-
+      
   grafana:
     image: grafana/grafana
-    environment:
-      GF_RENDERER_PLUGIN_TZ: Asia/Ho_Chi_Minh
+    
     volumes:
       - grafana_data:/var/lib/grafana
-      - /mnt/share/grafana/provisioning:/etc/grafana/provisioning
-      - /mnt/share/grafana.ini:/etc/grafana/grafana.ini:ro
-      - /mnt/share/grafana/emails:/usr/share/grafana/public/emails
+      - /mnt/shared/grafana:/etc/grafana/provisioning
+      - /mnt/shared/grafana.ini:/etc/grafana/grafana.ini:ro
+      #- /mnt/shared/grafana/emails:/usr/share/grafana/public/emails
     networks:
       - network
+    environment:
+
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
     deploy:
       placement:
         constraints:
           - node.role == manager
           - node.labels.grafana == true
-    ports:
-      - 3000:3000
+
   grafana_proxy:
-    image: elfdev/nginx-proxy:0.0.1
-    environment:
-      PROXY_MAP: |
-        / => grafana:3000/
+    image: harbor.elofun.net/core/nginx-proxy:0.0.1
     networks:
       - network
+      - traefik_public
+      - ingress_network
+    environment:
+      PROXY_MAP: |
+        / => grafana:3000/   
+    deploy:
+      labels:
+        - ingress.host=grafana.hongduydevops.id.vn
+
+  node-exporter_proxy:
+    image: harbor.elofun.net/core/nginx-proxy:0.0.1
+    networks:
+      - network
+      - traefik_public
+      - ingress_network
+    environment:
+      PROXY_MAP: |
+        / => node-exporter:9100/
+    deploy:
+     
+      labels:
+        - ingress.host=node.hongduydevops.id.vn 
+
   prometheus_proxy:
-    image: elfdev/nginx-proxy:0.0.1
+    image: harbor.elofun.net/core/nginx-proxy:0.0.1
+    networks:
+      - network
+      - traefik_public
+      - ingress_network
     environment:
       PROXY_MAP: |
         / => prometheus:9090/
-    networks:
-      - network
+    deploy:
+     
+      labels:
+        - ingress.host=prometheus.hongduydevops.id.vn 
+        
 volumes:
-  grafana_data:
-  prometheus_data:
-  dbdata:
+    grafana_data:
+    prometheus_data:
+    dbdata:
 
 networks:
   network:
+  ingress_network:
+    external: true
+  traefik_public:
+    external: true
   prometheus:
     attachable: true
